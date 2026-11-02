@@ -28,22 +28,26 @@ jobs:
       # Collect exactly the files the browser flash tool needs,
       # plus the build's own flash_args and a human-readable
       # FLASH-ME.txt listing which file goes at which offset.
+      # The build directory is build-muse-m5stack-cores3 (the board
+      # script names it after the board profile), so locate the app
+      # binary instead of guessing the directory name.
       - name: Stage the flashable files
         shell: bash
         run: |
           mkdir -p firmware-out
-          cd esp32/build-muse-cores3
-          cp bootloader/bootloader.bin ../../firmware-out/
-          cp partition_table/partition-table.bin ../../firmware-out/
-          cp ota_data_initial.bin ../../firmware-out/
-          cp muse-gadget.bin ../../firmware-out/
-          cp flash_args ../../firmware-out/
-          grep -E '^[[:space:]]*0x' flash_args \
+          APP_BIN=$(find esp32 -name 'muse-gadget.bin' | head -n 1)
+          BUILD_DIR=$(dirname "$APP_BIN")
+          echo "Using build directory: $BUILD_DIR"
+          cp "$BUILD_DIR/flash_args" firmware-out/
+          grep -E '^[[:space:]]*0x' "$BUILD_DIR/flash_args" | awk '{print $2}' | while read -r rel; do
+            cp "$BUILD_DIR/$rel" "firmware-out/$(basename "$rel")"
+          done
+          grep -E '^[[:space:]]*0x' firmware-out/flash_args \
             | sed -e 's#bootloader/bootloader.bin#bootloader.bin#' \
                   -e 's#partition_table/partition-table.bin#partition-table.bin#' \
-            > ../../firmware-out/FLASH-ME.txt
-          ls -l ../../firmware-out
-          cat ../../firmware-out/FLASH-ME.txt
+            > firmware-out/FLASH-ME.txt
+          ls -l firmware-out
+          cat firmware-out/FLASH-ME.txt
 
       - name: Upload the firmware artifact
         uses: actions/upload-artifact@v4
