@@ -1,0 +1,53 @@
+name: Build CoreS3 firmware with live voice
+
+# Manual trigger only: run it from the Actions tab ("Run workflow").
+on:
+  workflow_dispatch:
+
+jobs:
+  build-cores3-voice:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the fork
+        uses: actions/checkout@v4
+
+      # Builds inside Espressif's official ESP-IDF v6.0.1 container,
+      # with the IDF environment already activated.
+      # NOTE: no SDK token is set here on purpose. Never put the token
+      # in GitHub. The gadget already holds it in its settings memory
+      # (sent over USB by Meta's web flasher) and keeps it across this
+      # flash, because the flash step does not touch that memory area.
+      - name: Build the CoreS3 firmware
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v6.0.1
+          target: esp32s3
+          path: "esp32"
+          command: "tools/muse/board.sh build cores3"
+
+      # Collect exactly the files the browser flash tool needs,
+      # plus the build's own flash_args and a human-readable
+      # FLASH-ME.txt listing which file goes at which offset.
+      - name: Stage the flashable files
+        shell: bash
+        run: |
+          mkdir -p firmware-out
+          cd esp32/build-muse-cores3
+          cp bootloader/bootloader.bin ../../firmware-out/
+          cp partition_table/partition-table.bin ../../firmware-out/
+          cp ota_data_initial.bin ../../firmware-out/
+          cp muse-gadget.bin ../../firmware-out/
+          cp flash_args ../../firmware-out/
+          grep -E '^[[:space:]]*0x' flash_args \
+            | sed -e 's#bootloader/bootloader.bin#bootloader.bin#' \
+                  -e 's#partition_table/partition-table.bin#partition-table.bin#' \
+            > ../../firmware-out/FLASH-ME.txt
+          ls -l ../../firmware-out
+          cat ../../firmware-out/FLASH-ME.txt
+
+      - name: Upload the firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cores3-voice-firmware
+          path: firmware-out/
+          if-no-files-found: error
